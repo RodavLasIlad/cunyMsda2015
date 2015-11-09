@@ -2,7 +2,7 @@
 title: "medicare exploration"
 author: "Brett Burk"
 date: "September 21, 2015"
-output: html_document
+output: pdf_document
 ---
 ```{r}
 medicare <- read.csv('C:\\medicare\\Medicare.csv')
