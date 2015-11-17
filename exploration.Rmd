@@ -48,20 +48,20 @@ hcpcs are actually cpt codes, and they vary regionally (although most are consta
 
 ```{r}
 query3 <- dbSendQuery(mydb, "
-+ SELECT   m.provider_type, COUNT(*)
-+ FROM     medicare.twentytwelve AS m
-+ WHERE m.nppes_provider_state = 'NY'
-+ GROUP BY m.provider_type
-+ ORDER BY COUNT;")
+SELECT   m.provider_type, COUNT(*)
+FROM     medicare.twentytwelve AS m
+WHERE m.nppes_provider_state = 'NY'
+GROUP BY m.provider_type
+ORDER BY COUNT;")
 ```
 
 ```{r}
 query4 <- dbSendQuery(mydb, "
 SELECT   m.hcpcs_code, COUNT(*)
 FROM     medicare.twentytwelve AS m
-WHERE m.nppes_provider_state = 'NY' AND m.provider_type = 'Anesthesiology'
+WHERE m.nppes_provider_state = 'NY'
 GROUP BY m.hcpcs_code;")
-temp5 <- fetch(query3)
+temp5 <- fetch(query4)
 temp5
 names(temp5) <- c('type', 'count')
 
@@ -72,13 +72,11 @@ ggplot(temp4, aes(x = type, y = count)) + geom_bar(stat = "identity", width = .7
 
 ```{r}
 query5 <- dbSendQuery(mydb, "
-SELECT   m.hcpcs_code, COUNT(DISTINCT m.npi)
+SELECT   *
 FROM     medicare.twentytwelve AS m
-WHERE m.nppes_provider_state = 'NY' AND m.provider_type = 'Anesthesiology'
-GROUP BY m.hcpcs_code;")
-temp <- fetch(query5)
-names(temp) <- c('code', 'count')
-temp[order(temp$count),]
+WHERE m.nppes_provider_state = 'NY' AND m.provider_type = 'ophthalmology';")
+temp <- fetch(query5, n = -1)
+write.csv(temp, 'C:\\medicare\\nyopth.csv')
 ```
 
 67  01210    36
@@ -166,5 +164,10 @@ Nov 99.Volume 9, Issue 11, November 1999
 subset <- dbSendQuery(mydb, "
 SELECT   *
 FROM     medicare.twentytwelve AS m
-WHERE m.nppes_provider_state = 'NY' AND m.provider_type = 'Anesthesiology';")
+WHERE m.provider_type = 'Ophthalmology'")
 temp.sub <- fetch(subset)
+```
+
+Ophthalmological services: medical examination and evaluation, with initiation or continuation of diagnostic and treatment program; intermediate, established patient
+
+Ophthalmological services: medical examination and evaluation, with initiation or continuation of diagnostic and treatment program; comprehensive, established patient, 1 or more visits
