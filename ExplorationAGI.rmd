@@ -1,0 +1,63 @@
+---
+title: "AGI & Income Index"
+author: "Partha Banerjee"
+output: html_document
+---
+
+Outcome of this work is to find Zip wise "Adjusted gross income (AGI)" and then calculate Income Index which will be used towards medicare data factoring for fraud detection. Source of the data: <a href="https://www.irs.gov/uac/SOI-Tax-Stats-Individual-Income-Tax-Statistics-2012-ZIP-Code-Data-(SOI)">IRS Website</a>.
+
+Download data file **12zp33ny.xls** from IRS
+
+* Open 12zp33ny.xls and remove header and footer descriptions since they will not be part of our intended data
+* Save file as **12zp33ny.csv** as otherwise we need to add some programming complexity to read data directly from .xls file
+
+```{r}
+# Function to return number for a factor
+nmbr <- function(col) {
+  return(suppressWarnings(as.numeric(gsub(",","", as.character(col)))))
+}
+```
+```{r}
+fl <- "12zp33ny.csv"
+```
+```{r}
+# Read data file
+agi_ny_raw <- read.csv(fl)
+
+# Remove unnecessary columns by keeping ZIP, Number.of.returns, 
+# Size.of.adjusted.gross.income, and AGI.
+# We need Size.of.adjusted.gross.income for filtering the data and will remove this
+# column once filtering is over.
+# Remove all NA values from data.
+agi_ny <- agi_ny_raw[,c(1,2,3,10)]
+agi_ny <- agi_ny[complete.cases(agi_ny),]
+colnames(agi_ny) <- c('ZIP', 'X', 'Tot.Returns', 'Tot.AGI')
+
+# AGI should be Total of AGI's / Total of Returns
+agi_ny$AGI <- round(nmbr(agi_ny$Tot.AGI) / nmbr(agi_ny$Tot.Returns), 0)
+
+# Remove ZIP codes 00000 and 99999 as they represent the total of all Zip values and
+# nonresidential ZIP/Category code respectively and will not serve any purpose for us.
+agi_ny <- agi_ny[ which(agi_ny$ZIP!=0 & agi_ny$ZIP!=99999),]
+
+# Remove Size.of.adjusted.gross.income level data by keeping only ZIP level value.
+agi_ny <- agi_ny[agi_ny$X=="",]
+agi_ny <- agi_ny[,c(1,3,4,5)]
+agi_ny <- agi_ny[order(agi_ny$ZIP),]
+
+# Display data
+head(agi_ny)
+tail(agi_ny)
+```
+
+Now we will find the median value for AGI and use that as standard to calculate the Index for Income. We will use this index to normalize the data.
+
+```{r}
+m_agi <- median(agi_ny$AGI)
+agi_ny$II <- round(agi_ny$AGI / m_agi, 2)
+summary(agi_ny)
+
+# Display data
+head(agi_ny)
+tail(agi_ny)
+```
