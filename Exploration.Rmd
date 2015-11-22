@@ -1,0 +1,66 @@
+---
+title: "Exploration"
+output: pdf_document
+---
+
+```{r}
+library(plyr)
+```
+
+Income data is from http://www.psc.isr.umich.edu/dis/census/Features/tract2zip/
+
+```{r}
+nyopth <- read.csv("~/cunyMsda2015/nyopth.csv")
+load(file = "incomes.data")
+incomes$Median <- as.numeric(incomes$Median)
+incomes$Mean <- as.numeric(incomes$Mean)
+incomes$Pop <- as.numeric(incomes$Pop)
+```
+
+We first look at the top hcpcs codes to see which procedure is done most often (and thus which should have the most deviation and which should yield the biggest insights)
+```{r}
+sort(table(nyopth$hcpcs_code),decreasing = TRUE)
+```
+
+
+We take only the data for the top hcpcs code and try and determine if certain neighborhoods have a lower medicare payment amount
+```{r}
+nyopth.92014 <- nyopth[nyopth$hcpcs_code==92014,]
+
+nyopth.92014.city <- ddply(nyopth.92014,~nppes_provider_city,summarise,mean=mean(average_medicare_payment_amt))
+sorted.city <- nyopth.92014.city[order(-nyopth.92014.city$mean),]
+sorted.city
+```
+
+
+We can do the same thing with zipcode rather than city
+```{r}
+nyoprh.corezip <- nyopth.92014
+func <- function(x){
+  substr(x,1,5)
+}
+nyoprh.corezip$nppes_provider_zip <- lapply(nyoprh.corezip$nppes_provider_zip,FUN = func)
+nyoprh.corezip$nppes_provider_zip <- as.numeric(nyoprh.corezip$nppes_provider_zip)
+nyopth.92014.zip <- ddply(nyoprh.corezip,~nppes_provider_zip,summarise,mean=mean(average_medicare_payment_amt))
+sorted.zip <- nyopth.92014.zip[order(-nyopth.92014.zip$mean),]
+```
+
+We have (not very good) data about mean and median income by zipcode 
+```{r}
+summary(incomes)
+```
+
+```{r}
+sorted.zip.income <- merge(sorted.zip,incomes,by.x = "nppes_provider_zip",by.y = "Zip")
+sorted.zip.income <- sorted.zip.income[order(-sorted.zip.income$mean),]
+sorted.zip.income
+```
+
+
+```{r}
+plot(sorted.zip.income$mean~sorted.zip.income$Median)
+cor(sorted.zip.income$mean,sorted.zip.income$Median)
+```
+
+I thought there would be a correlation between the mean average medicare payment amount and the median income, but seems like there isn't.  However, a further look at this income data makes it look like it isnt reliable
+
