@@ -1,0 +1,116 @@
+---
+title: "Data Exploration"
+author: "Sharad Gurung"
+date: "November 21, 2015"
+output: html_document
+---
+
+
+```{r}
+library(plyr)
+nyop = read.csv("C:\\temp\\nyop.txt")
+```
+
+Exploring ophthalmologists in New York state.
+
+First, we will see provider distribution in NY by city.
+
+```{r}
+ny.city = unique(nyop[,c("npi", "nppes_provider_city")])
+ny.city.summ = ddply(ny.city, "nppes_provider_city", function(df){
+  total = nrow(df)
+})
+head(ny.city.summ[order(-ny.city.summ$V1),], 5)
+tail(ny.city.summ[order(-ny.city.summ$V1),], 5)
+```
+
+The provider frequency distribution above will be used for optimization model and simulation. We will assume that providers are proportionally distributed in areas where patients. Areas such as New York City will have a higher provider density compared to Hudson. Since, our dataset does not have beneficiary information we will use this distribution to spread total beneficiaries to cities. This may not be accurate.
+
+
+```{r}
+sum(nyop$bene_unique_cnt)
+```
+
+We need a rough idea of how many beneficiaries there are in this dataset. 
+The total number of Medicare beneficiaries in NY for 2012 was 3,093,591. http://kff.org/medicare/state-indicator/total-medicare-beneficiaries/
+
+We will make some wild assumptions to estimate this number. Let's assume the beneficiary unique count per procedure can be summed up to get this estimate. This is not accurate because there are overlaps. Second we assume the beneficiaries will stay with their provider and not go to various providers for different services within a specialty. For example, if I am seeing one eye specialist, I will go to that specialist for all my eye related needs.
+
+
+```{r}
+ny.hcpcs = nyop[,c("npi","place_of_service","hcpcs_code","hcpcs_drug_indicator","line_srvc_cnt","bene_unique_cnt","bene_day_srvc_cnt","average_medicare_allowed_amount","stdev_medicare_allowed_amount","average_submitted_chrg_amt","stdev_submitted_chrg_amt","average_medicare_payment_amt","stdev_medicare_payment_amt")]
+
+ny.hcpcs.summ = ddply(ny.hcpcs, "hcpcs_code", function(df){
+  data.frame(
+    provider.count = nrow(df),
+    line.count = sum(df$line_srvc_cnt),
+    line.min = min(df$line_srvc_cnt),
+    line.avg = round(mean(df$line_srvc_cnt),0),
+    line.max = max(df$line_srvc_cnt),
+    bene.count = sum(df$bene_unique_cnt),
+    bene.min = min(df$bene_unique_cnt),
+    bene.avg = round(mean(df$bene_unique_cnt),0),
+    bene.max = max(df$bene_unique_cnt)
+  )
+})
+head(ny.hcpcs.summ[order(-ny.hcpcs.summ$line.count),], 10)
+```
+
+Next, we look at services provided; the table above summarizes procedures. The "line" columns show services provided and "bene" columns show beneficiaries. There is much variation in the number of services provided among the providers.
+
+```{r}
+ny.hcpcs.summ[ny.hcpcs.summ$hcpcs_code == "92002" 
+              | ny.hcpcs.summ$hcpcs_code == "92004" 
+              | ny.hcpcs.summ$hcpcs_code == "92012" 
+              | ny.hcpcs.summ$hcpcs_code == "92014", ]
+
+```
+
+Let's focus on some examination code: 92002, 92004, 92012, and 92014. First two are for new patients and the last two are for established patients. Most services are for existing patients.
+
+We started with a total of 1614 providers. The provides will bill a mix of these procedures.
+
+```{r}
+ny.single = ny.hcpcs[ny.hcpcs$npi == "1003018102", ]
+ny.single = ny.single[ny.single$hcpcs_code == "92002" | ny.single$hcpcs_code == "92004" | ny.single$hcpcs_code == "92012" | ny.single$hcpcs_code == "92014", ]
+ny.single[,c(
+"hcpcs_code","line_srvc_cnt","bene_unique_cnt","bene_day_srvc_cnt","average_medicare_allowed_amount","average_submitted_chrg_amt","average_medicare_payment_amt"
+)]
+
+```
+
+For the provider above, there could be 453 to 780 beneficiaries; the accurate number is somewhere in between. The total services are equal to or very close to the number of beneficiaries. We can assume most patients get one eye exam a year.
+
+Interestingly, we see more instances of comprehensive exam compared to intermediate exam. Comprehensive exams pay almost twice but are they twice as medically necessary?
+
+
+```{r}
+ny.exam = ny.hcpcs[ny.hcpcs$hcpcs_code == "92002" | ny.hcpcs$hcpcs_code == "92004" | ny.hcpcs$hcpcs_code == "92012" | ny.hcpcs$hcpcs_code == "92014", ]
+# ny.exam[,c(
+# "hcpcs_code","line_srvc_cnt","bene_unique_cnt","bene_day_srvc_cnt","average_medicare_allowed_amount","average_submitted_chrg_amt","average_medicare_payment_amt"
+# )]
+
+ny.exam.summ = ddply(ny.exam, "hcpcs_code", function(df){
+  data.frame(
+    provider.count = nrow(df),
+    line.sum = sum(df$line_srvc_cnt),
+    bene.sum = sum(df$bene_unique_cnt),
+    allow.sum = sum(df$average_medicare_allowed_amount),
+    submit.sum = sum(df$average_submitted_chrg_amt),
+    paid.sums = sum(df$average_medicare_payment_amt)
+  )
+})
+ny.exam.summ
+```
+
+NY summary shows a similar pattern. 
+
+```{r}
+ny.exam.summ$collect = ny.exam.summ$allow.sum - ny.exam.summ$paid.sums
+ny.exam.summ$collect_allowed = ny.exam.summ$collect/ny.exam.summ$allow.sum
+ny.exam.summ
+
+```
+
+Patient responsibility is slightly lower for established intermediate exams, but this may not be significant enough to make a difference.
+
