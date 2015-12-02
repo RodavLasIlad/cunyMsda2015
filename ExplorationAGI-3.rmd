@@ -1,0 +1,99 @@
+---
+title: "AGI & Income Index"
+author: "Partha Banerjee"
+output: pdf_document
+---
+
+Outcome of this work is to find Zip wise "Adjusted gross income (AGI)" and then calculate Income Index which will be used towards medicare data factoring for fraud detection. Source of the data: <a href="https://www.irs.gov/uac/SOI-Tax-Stats-Individual-Income-Tax-Statistics-2012-ZIP-Code-Data-(SOI)">IRS Website</a>.
+
+Download data file **12zp33ny.xls** from IRS
+
+* Open 12zp33ny.xls and remove header and footer descriptions since they will not be part of our intended data
+* Save file as **12zp33ny.csv** as otherwise we need to add some programming complexity to read data directly from .xls file
+
+```{r}
+# Function to return number for a factor
+nmbr <- function(col) {
+  return(suppressWarnings(as.numeric(gsub(",","", as.character(col)))))
+}
+```
+```{r}
+infl <- "12zp33ny.csv"
+
+# Read data file
+agi_ny_raw <- read.csv(infl)
+```
+
+**Clean Data**
+
+```{r}
+# Remove unnecessary columns by keeping ZIP, Number.of.returns, 
+# Size.of.adjusted.gross.income, and AGI.
+# We need Size.of.adjusted.gross.income for filtering the data and will remove this
+# column once filtering is over.
+# Remove all NA values from data.
+agi_ny <- agi_ny_raw[,c(1,2,3,10)]
+agi_ny <- agi_ny[complete.cases(agi_ny),]
+colnames(agi_ny) <- c('ZIP', 'X', 'Tot_Returns', 'Tot_AGI')
+
+# AGI should be Total of AGI's / Total of Returns
+#agi_ny$AGI <- round(nmbr(agi_ny$Tot.AGI) / nmbr(agi_ny$Tot.Returns), 0)
+
+# Remove ZIP codes 00000 and 99999 as they represent the total of all Zip values and
+# nonresidential ZIP/Category code respectively and will not serve any purpose for us.
+agi_ny <- agi_ny[ which(agi_ny$ZIP!=0 & agi_ny$ZIP!=99999),]
+
+# Remove ZIP wise total data line by keeping category level values
+agi_ny <- agi_ny[agi_ny$X!="",]
+
+# Remove 0 Tot_Returns from data set
+agi_ny <- agi_ny[agi_ny$Tot_Returns!="**",]
+```
+
+**Process Data**
+
+Here we will do the following:
+
+* Calculate ZIP wise total number of returns
+* Calculate percentage of category population within the ZIP
+* Adjust AGI based upon population representation for each category within the ZIP
+* Aggregate this adjusted AGI on ZIP
+
+```{r}
+# Add Zip wise total as a separate column and adjust total returns based upon population %
+agi_ny$ZipTotReturns <- ave(nmbr(agi_ny$Tot_Returns), agi_ny$ZIP, FUN=sum)
+agi_ny$PopulationPC <- round(nmbr(agi_ny$Tot_Returns)/agi_ny$ZipTotReturns,4)
+
+# Adjust AGI based upon their weight
+agi_ny$Adj_AGI <- round(nmbr(agi_ny$Tot_AGI)*agi_ny$PopulationPC,2)
+
+# Now calculate ZIP level weighted average AGI
+suppressMessages(library(sqldf))
+sql <- "select ZIP, ZipTotReturns as TotReturns, sum(adj_agi) as Adj_AGI"
+sql <- paste(sql, ", round(sum(adj_agi)/ZipTotReturns,2) as Avg_AGI")
+sql <- paste(sql, "from agi_ny")
+sql <- paste(sql, "group by ZIP, ZipTotReturns")
+agi_ny <- suppressMessages(sqldf(sql))
+
+# Display data
+head(agi_ny)
+tail(agi_ny)
+```
+
+Now we will take the natural log for the Avg_AGI column and use that as the Index for Income. We will use this index to normalize the data.
+
+```{r}
+agi_ny$Indx <- round(log(agi_ny$Avg_AGI), 2)
+summary(agi_ny)
+
+# Display data
+head(agi_ny)
+tail(agi_ny)
+```
+
+Writing AGI Index data to CSV file
+
+```{r}
+outfl <- "agi.csv"
+write.csv(agi_ny, outfl, row.names=FALSE)
+```
